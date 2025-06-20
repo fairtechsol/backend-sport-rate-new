@@ -668,11 +668,16 @@ defmodule Thirdparty.MatchIntervalManager.Server do
       Enum.reduce(currRedisData, {onlyLiveSession, expertSession}, fn session,
                                                                       {onlyLiveSession,
                                                                        expertSession} ->
-        selection_id = to_string(session["selectionId"])
+        selection_id = session["selectionId"]
 
         # only proceed if we haven't already added this selection
+        already_present =
+          Enum.find(addedSession, fn id ->
+            to_string(id) == to_string(selection_id)
+          end)
+
         obj =
-          if List.keyfind(addedSession, selection_id, 0) == nil do
+          if already_present == nil do
             # build your base obj (if manual, apply your formatting logic)
             obj =
               if session["isManual"] do
@@ -841,6 +846,7 @@ defmodule Thirdparty.MatchIntervalManager.Server do
         expertSession = [obj | expertSession]
       end
     end)
+
     %{
       "returnResult" => %{
         # "mname" => result["mname"],
