@@ -12,24 +12,63 @@ defmodule Thirdparty.MatchIntervalManager.Server do
   alias Phoenix.PubSub
 
   # e.g. 2 seconds; match your `liveGameTypeTime`
-  @tick_us 5
+  @tick_us 500
   ## Client API
 
-  def start_link({match_id}) do
-    GenServer.start_link(__MODULE__, {match_id}, name: via(match_id))
+  def start_link(match_id) do
+    GenServer.start_link(__MODULE__, match_id, name: via(match_id))
+  end
+
+  def child_spec(match_id) do
+    %{
+      id: {__MODULE__, match_id},
+      start: {__MODULE__, :start_link, [match_id]},
+      # Crucial: prevents automatic restart
+      restart: :temporary
+    }
   end
 
   @impl true
-  def init({match_id}) do
-    schedule_tick()
-    {:ok, %{match_id: match_id}}
+  def init(match_id) do
+    timer_ref = schedule_tick()
+    {:ok, %{match_id: match_id, listener_count: 1, timer_ref: timer_ref}}
+  end
+
+  @impl true
+  def handle_cast(:increment, state) do
+    Logger.debug(
+      "Incrementing listener count for match_id: #{state.match_id} #{state.listener_count}"
+    )
+
+    new_state = %{state | listener_count: state.listener_count + 1}
+    {:noreply, new_state}
+  end
+
+  @impl true
+  def handle_cast(:decrement, state) do
+    Logger.debug(
+      "Decrementing listener count for match_id: #{state.match_id} #{state.listener_count}"
+    )
+
+    new_count = state.listener_count - 1
+
+    Logger.debug(
+      "Decrementing listener count for match_id: #{state.match_id}, new count: #{new_count}"
+    )
+
+    if new_count == 0 do
+      # Last listener - stop server and interval
+      {:stop, :normal, state}
+    else
+      {:noreply, %{state | listener_count: new_count}}
+    end
   end
 
   @impl true
   # Every @fetch_interval_ms, we receive {:perform_fetch, match_id}
   # → fetch fresh data from Redis, then broadcast it on PubSub
   def handle_info(:tick, state) do
-    schedule_tick()
+    timer_ref = schedule_tick()
     {user_data, expert_data} = fetch_data(state.match_id)
 
     PubSub.broadcast(
@@ -44,7 +83,7 @@ defmodule Thirdparty.MatchIntervalManager.Server do
       {:match_data, state.match_id, expert_data}
     )
 
-    {:noreply, state}
+    {:noreply, %{state | timer_ref: timer_ref}}
   end
 
   defp schedule_tick do
@@ -119,6 +158,7 @@ defmodule Thirdparty.MatchIntervalManager.Server do
   end
 
   def getCricketData(matchId, marketId, matchData) do
+    Logger.debug(matchId)
     alias ThirdpartyWeb.ExternalApis.Match, as: MatchListApi
     alias ThirdpartyWeb.Constant, as: Constant
     matchDetail = matchData
@@ -976,7 +1016,23 @@ defmodule Thirdparty.MatchIntervalManager.Server do
     end
   end
 
-  defp via(match_id) do
+  def via(match_id) do
     {:via, Registry, {Thirdparty.MatchIntervalManager.Registry, match_id}}
+  end
+
+  def increment_listener(server_pid) do
+    GenServer.cast(server_pid, :increment)
+  end
+
+  def decrement_listener(server_pid) do
+    GenServer.cast(server_pid, :decrement)
+  end
+
+  @impl true
+  def terminate(_reason, state) do
+    # Clean up timer
+    if state.timer_ref, do: Process.cancel_timer(state.timer_ref)
+    Logger.debug("Stopped interval for match: #{state.match_id}")
+    :ok
   end
 end

@@ -67,7 +67,6 @@ defmodule ThirdpartyWeb.MatchChannel do
     for id <- socket.assigns.match_ids do
       MatchIntervalManager.untrack_listener(id)
     end
-
     :ok
   end
 
