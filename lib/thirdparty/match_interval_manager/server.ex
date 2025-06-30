@@ -12,7 +12,7 @@ defmodule Thirdparty.MatchIntervalManager.Server do
   alias Phoenix.PubSub
 
   # e.g. 2 seconds; match your `liveGameTypeTime`
-  @tick_us 500
+  @tick_us 300
   ## Client API
 
   def start_link(match_id) do
@@ -30,7 +30,8 @@ defmodule Thirdparty.MatchIntervalManager.Server do
 
   @impl true
   def init(match_id) do
-    timer_ref = schedule_tick()
+    timer_ref = :timer.send_interval(@tick_us, :tick)
+
     {:ok, %{match_id: match_id, listener_count: 1, timer_ref: timer_ref}}
   end
 
@@ -68,27 +69,27 @@ defmodule Thirdparty.MatchIntervalManager.Server do
   # Every @fetch_interval_ms, we receive {:perform_fetch, match_id}
   # → fetch fresh data from Redis, then broadcast it on PubSub
   def handle_info(:tick, state) do
-    timer_ref = schedule_tick()
+    # timer_ref = schedule_tick()
     {user_data, expert_data} = fetch_data(state.match_id)
+    Task.start(fn -> do_broadcast(state.match_id) end)
+
+    {:noreply, state}
+  end
+
+  defp do_broadcast(match_id) do
+    {user_data, expert_data} = fetch_data(match_id)
+    PubSub.broadcast(Thirdparty.PubSub, "match:#{match_id}", {:match_data, match_id, user_data})
 
     PubSub.broadcast(
       Thirdparty.PubSub,
-      "match:#{state.match_id}",
-      {:match_data, state.match_id, user_data}
+      "match_expert:#{match_id}",
+      {:match_data, match_id, expert_data}
     )
-
-    PubSub.broadcast(
-      Thirdparty.PubSub,
-      "match_expert:#{state.match_id}",
-      {:match_data, state.match_id, expert_data}
-    )
-
-    {:noreply, %{state | timer_ref: timer_ref}}
   end
 
-  defp schedule_tick do
-    Process.send_after(self(), :tick, @tick_us)
-  end
+  # defp schedule_tick do
+  #   Process.send_after(self(), :tick, @tick_us)
+  # end
 
   defp fetch_data(match_id) do
     # Here we integrate the original getCricketData logic.
@@ -1031,7 +1032,7 @@ defmodule Thirdparty.MatchIntervalManager.Server do
   @impl true
   def terminate(_reason, state) do
     # Clean up timer
-    if state.timer_ref, do: Process.cancel_timer(state.timer_ref)
+    if state.timer_ref, do: :timer.cancel(state.timer_ref)
     Logger.debug("Stopped interval for match: #{state.match_id}")
     :ok
   end
