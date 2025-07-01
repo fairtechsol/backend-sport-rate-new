@@ -190,7 +190,10 @@ defmodule Thirdparty.MatchIntervalManager.Server do
       customObject = %{"tournament" => []}
 
       data =
-        case MatchListApi.fetch_match_rate("2", matchDetail["eventId"]) do
+        case MatchListApi.fetch_match_rate(
+               if(matchDetail["matchType"] == "cricket", do: "2", else: "3"),
+               matchDetail["eventId"]
+             ) do
           {:ok, map} ->
             map["data"]
 
