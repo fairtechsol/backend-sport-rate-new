@@ -12,11 +12,13 @@ config :thirdparty, ThirdpartyWeb.Endpoint,
   http: [
     ip: {0, 0, 0, 0},
     port: String.to_integer(System.get_env("PORT") || "4000"),
-    protocol_options: [
-      max_request_line: 8_192,
-      max_header_value_length: 8_192,
-      idle_timeout: 60_000,
-      request_timeout: 30_000
+    transport_options: [
+      protocol_options: [
+        max_request_line: 8_192,
+        max_header_value_length: 8_192,
+        idle_timeout: 60_000,
+        request_timeout: 30_000
+      ]
     ]
   ],
   # secret_key_base: System.fetch_env!("SECRET_KEY_BASE"),
