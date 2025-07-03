@@ -7,7 +7,7 @@ config :thirdparty, ThirdpartyWeb.Endpoint,
 
   # Base URL configuration for URL generation in mailers, etc.
   url: [
-    host: System.fetch_env!("HOST"),
+    host: System.fetch_env!("HOST") || "serviceexl.fairgame.club",
     port: String.to_integer(System.get_env("PORT") || "4000")
   ],
 
