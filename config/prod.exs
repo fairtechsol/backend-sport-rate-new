@@ -6,7 +6,9 @@ import Config
 # which you should run after static files are built and
 # before starting your production server.
 config :thirdparty, ThirdpartyWeb.Endpoint,
-  cache_static_manifest: "priv/static/cache_manifest.json"
+  cache_static_manifest: "priv/static/cache_manifest.json",
+  server: true,
+  check_origin: false
 
 # Configures Swoosh API Client
 config :swoosh, api_client: Swoosh.ApiClient.Finch, finch_name: Thirdparty.Finch
@@ -16,7 +18,3 @@ config :swoosh, local: false
 
 # Do not print debug messages in production
 config :logger, level: :info
-
-config :thirdparty, ThirdpartyWeb.Endpoint, server: true
-# Runtime production configuration, including reading
-# of environment variables, is done on config/runtime.exs.
