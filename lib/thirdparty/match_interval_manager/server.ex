@@ -30,8 +30,6 @@ defmodule Thirdparty.MatchIntervalManager.Server do
 
   @impl true
   def init(match_id) do
-    Logger.debug("Starting MatchIntervalManager.Server for match_id: #{match_id}")
-    handle_info(:tick, %{match_id: match_id})
     timer_ref = :timer.send_interval(@tick_us, :tick)
 
     {:ok, %{match_id: match_id, listener_count: 1, timer_ref: timer_ref}}
