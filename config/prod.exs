@@ -19,7 +19,7 @@ config :thirdparty, ThirdpartyWeb.Endpoint,
       request_timeout: 30_000
     ]
   ],
-  secret_key_base: System.fetch_env!("SECRET_KEY_BASE"),
+  # secret_key_base: System.fetch_env!("SECRET_KEY_BASE"),
   code_reloader: false
 
 # Configures Swoosh API Client
