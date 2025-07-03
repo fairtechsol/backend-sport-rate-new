@@ -8,7 +8,19 @@ import Config
 config :thirdparty, ThirdpartyWeb.Endpoint,
   cache_static_manifest: "priv/static/cache_manifest.json",
   server: true,
-  check_origin: false
+  check_origin: false,
+  http: [
+    ip: {0, 0, 0, 0},
+    port: String.to_integer(System.get_env("PORT") || "4000"),
+    protocol_options: [
+      max_request_line: 8_192,
+      max_header_value_length: 8_192,
+      idle_timeout: 60_000,
+      request_timeout: 30_000
+    ]
+  ],
+  secret_key_base: System.fetch_env!("SECRET_KEY_BASE"),
+  code_reloader: false
 
 # Configures Swoosh API Client
 config :swoosh, api_client: Swoosh.ApiClient.Finch, finch_name: Thirdparty.Finch
