@@ -1,5 +1,6 @@
 defmodule ThirdpartyWeb.MatchChannel do
   use Phoenix.Channel
+
   require Logger
   alias Thirdparty.MatchIntervalManager
   alias ThirdpartyWeb.Presence
@@ -11,18 +12,11 @@ defmodule ThirdpartyWeb.MatchChannel do
     ids = socket.assigns.match_ids
     Logger.debug("Joining matches:lobby with role: #{role} and match_ids: #{inspect(ids)}")
 
-    # Parallelize PubSub subscriptions
-    tasks =
-      for id <- ids do
-        Task.async(fn ->
-          topic = topic_for(id, role)
-          PubSub.subscribe(Thirdparty.PubSub, topic)
-        end)
-      end
-    Task.await_many(tasks, 500)
-
-    # ASYNC: Non-blocking server tracking
-    for id <- ids, do: MatchIntervalManager.track_listener(id)
+    for id <- ids do
+      topic = topic_for(id, role)
+      PubSub.subscribe(Thirdparty.PubSub, topic)
+      MatchIntervalManager.track_listener(id)
+    end
 
     send(self(), :after_join)
     {:ok, socket}
@@ -39,23 +33,26 @@ defmodule ThirdpartyWeb.MatchChannel do
     })
 
     push(socket, "presence_state", Presence.list("matches:lobby"))
+
     {:noreply, socket}
   end
 
   @impl true
   def handle_in("disconnectCricketData", %{"matchId" => id, "roleName" => role}, socket) do
     PubSub.unsubscribe(Thirdparty.PubSub, topic_for(id, role))
-    MatchIntervalManager.untrack_listener(id)  # ASYNC untrack
+    MatchIntervalManager.untrack_listener(id)
     {:noreply, socket}
   end
 
   @impl true
   def handle_in("leaveAllRoom", _payload, socket) do
     role = socket.assigns.role_name
+
     for id <- socket.assigns.match_ids do
       PubSub.unsubscribe(Thirdparty.PubSub, topic_for(id, role))
-      MatchIntervalManager.untrack_listener(id)  # ASYNC untrack
+      MatchIntervalManager.untrack_listener(id)
     end
+
     {:noreply, socket}
   end
 
@@ -68,7 +65,7 @@ defmodule ThirdpartyWeb.MatchChannel do
   @impl true
   def terminate(_reason, socket) do
     for id <- socket.assigns.match_ids do
-      MatchIntervalManager.untrack_listener(id)  # ASYNC untrack
+      MatchIntervalManager.untrack_listener(id)
     end
     :ok
   end
