@@ -13,16 +13,6 @@ defmodule Thirdparty.MatchIntervalManager.Server do
 
   # e.g. 2 seconds; match your `liveGameTypeTime`
   @tick_us 300
-  @session_keys [
-    "session",
-    "overByover",
-    "ballByBall",
-    "oddEven",
-    "fancy1",
-    "khado",
-    "meter"
-  ]
-
   ## Client API
 
   def start_link(match_id) do
@@ -173,8 +163,26 @@ defmodule Thirdparty.MatchIntervalManager.Server do
     alias ThirdpartyWeb.ExternalApis.Match, as: MatchListApi
     alias ThirdpartyWeb.Constant, as: Constant
     matchDetail = matchData
-    returnResult = build_base(matchId, marketId, matchDetail)
-    expertResult = build_base(matchId, marketId, matchDetail)
+
+    returnResult = %{
+      "id" => matchId,
+      "marketId" => marketId,
+      "eventId" => matchDetail["eventId"],
+      "apiSession" => %{}
+    }
+
+    expertResult = %{
+      "id" => matchId,
+      "marketId" => marketId,
+      "eventId" => matchDetail["eventId"],
+      "apiSession" => %{}
+    }
+
+    isAPISessionActive =
+      if matchDetail["apiSessionActive"], do: matchDetail["apiSessionActive"], else: false
+
+    isManualSessionActive =
+      if matchDetail["manualSessionActive"], do: matchDetail["manualSessionActive"], else: false
 
     isManual = manual_prefix(marketId)
 
@@ -220,310 +228,292 @@ defmodule Thirdparty.MatchIntervalManager.Server do
       # 3) If there is any tournament data, build expertResult & returnResult’s “tournament” lists
       otherData = matchDetail["tournament"] || []
 
-      tasks = [
-        {:tournament,
-         fn ->
-           process_tournament(customObject, otherData, matchDetail, returnResult, expertResult)
-         end},
-        {:session,
-         fn -> process_session(customObject, matchDetail, returnResult, expertResult) end}
-      ]
+      {returnResult, expertResult} =
+        if customObject["tournament"] != [] or otherData != [] do
+          # Initialize empty lists
+          expertResult = Map.put(expertResult, "tournament", [])
+          returnResult = Map.put(returnResult, "tournament", [])
+          # First, iterate over customObject["tournament"]
+          iterated = []
 
-      results =
-        tasks
-        |> Task.async_stream(fn {key, fun} -> {key, fun.()} end, timeout: 5_000)
-        |> Enum.into(%{}, fn
-          {:ok, {key, {r, e}}} -> {key, %{return: r, expert: e}}
-        end)
+          {iterated, expertResult, returnResult} =
+            Enum.reduce(customObject["tournament"], {[], expertResult, returnResult}, fn item,
+                                                                                         {iters,
+                                                                                          eRes,
+                                                                                          rRes} ->
+              isRedisExist =
+                Enum.find_index(otherData, fn it ->
+                  to_string(it["mid"]) == to_string(item["mid"])
+                end)
 
-        returnResult=Map.put(returnResult, "tournament", results.tournament.return["tournament"] || [])
-       expertResult= Map.put(expertResult, "tournament", results.tournament.expert["tournament"] || [])
-
-      returnResult = Map.put(returnResult, "sessionBettings", results.session.return["sessionBettings"] || [])
-      expertResult = Map.put(expertResult, "sessionBettings", results.session.expert["sessionBettings"] || [])
-
-      returnResult = Map.put(returnResult, "apiSession", results.session.return["apiSession"] || %{})
-      expertResult = Map.put(expertResult, "apiSession", results.session.expert["apiSession"] || %{})
-
-      {returnResult, expertResult}
-    else
-      # If isManual is true, we do nothing and just return the original “blank” map
-      {returnResult, expertResult}
-    end
-  end
-
-  def process_tournament(customObject, otherData, matchDetail, returnResult, expertResult) do
-    {returnResult, expertResult} =
-      if customObject["tournament"] != [] or otherData != [] do
-        # Initialize empty lists
-        expertResult = Map.put(expertResult, "tournament", [])
-        returnResult = Map.put(returnResult, "tournament", [])
-        # First, iterate over customObject["tournament"]
-        iterated = []
-
-        {iterated, expertResult, returnResult} =
-          Enum.reduce(customObject["tournament"], {[], expertResult, returnResult}, fn item,
-                                                                                       {iters,
-                                                                                        eRes,
-                                                                                        rRes} ->
-            isRedisExist =
-              Enum.find_index(otherData, fn it ->
-                to_string(it["mid"]) == to_string(item["mid"])
-              end)
-
-            if isRedisExist != nil and isRedisExist >= 0 do
-              parseData = Enum.at(otherData, isRedisExist)
-
-              obj = %{
-                "id" => parseData["id"],
-                "marketId" => parseData["marketId"],
-                "name" => parseData["name"],
-                "minBet" => parseData["minBet"],
-                "maxBet" => parseData["maxBet"],
-                "type" => parseData["type"],
-                "isActive" => parseData["isActive"],
-                "activeStatus" => parseData["activeStatus"],
-                "isManual" => parseData["isManual"],
-                "dbRunner" => parseData["runners"],
-                "gtype" => parseData["gtype"],
-                "exposureLimit" => parseData["exposureLimit"],
-                "betLimit" => parseData["betLimit"],
-                "isCommissionActive" => parseData["isCommissionActive"],
-                "sno" => parseData["sNo"]
-              }
-
-              formateData = formateOdds(item, obj)
-              # Rebind expertResult
-              eRes = Map.put(eRes, "tournament", eRes["tournament"] ++ [formateData])
-              # If activeStatus is "live", also add to returnResult
-              rRes =
-                if parseData["activeStatus"] == "live" do
-                  Map.put(rRes, "tournament", rRes["tournament"] ++ [formateData])
-                else
-                  rRes
-                end
-
-              {iters ++ [item["mid"]], eRes, rRes}
-            else
-              {iters, eRes, rRes}
-            end
-          end)
-
-        # Next, iterate over otherData for any items not already in `iterated`
-        {returnResult, expertResult} =
-          Enum.reduce(otherData, {returnResult, expertResult}, fn item, {rResAcc, eResAcc} ->
-            if item["activeStatus"] != "close" do
-              already =
-                Enum.find_index(iterated, fn it -> to_string(it) == to_string(item["mid"]) end)
-
-              if already == nil or already < 0 do
-                isTwoTeam = length(item["runners"] || []) == 2
+              if isRedisExist != nil and isRedisExist >= 0 do
+                parseData = Enum.at(otherData, isRedisExist)
 
                 obj = %{
-                  "id" => item["id"],
-                  "marketId" => item["marketId"],
-                  "name" => item["name"],
-                  "minBet" => item["minBet"],
-                  "maxBet" => item["maxBet"],
-                  "type" => item["type"],
-                  "isActive" => item["isActive"],
-                  "activeStatus" => item["activeStatus"],
-                  "isCommissionActive" => item["isCommissionActive"],
-                  "sno" => item["sNo"],
-                  "parentBetId" => item["parentBetId"],
-                  "isManual" => item["isManual"],
-                  "runners" =>
-                    if item["isManual"] do
-                      Enum.map(item["runners"] || [], fn runner ->
-                        %{
-                          "selectionId" => runner["selectionId"],
-                          "status" => String.upcase(runner["status"]),
-                          "nat" => runner["runnerName"],
-                          "id" => runner["id"],
-                          "sortPriority" => runner["sortPriority"],
-                          "parentRunnerId" => runner["parentRunnerId"],
-                          "ex" => %{
-                            "availableToBack" => [
-                              %{
-                                "price" =>
-                                  if runner["backRate"] > 2 do
-                                    if isTwoTeam and runner["backRate"] > 100 do
-                                      0
-                                    else
-                                      trunc(:math.floor(runner["backRate"])) - 2
-                                    end
-                                  else
-                                    0
-                                  end,
-                                "otype" => "back",
-                                "oname" => "back3",
-                                "tno" => 2
-                              },
-                              %{
-                                "price" =>
-                                  if runner["backRate"] > 1 do
-                                    if isTwoTeam and runner["backRate"] > 100 do
-                                      0
-                                    else
-                                      trunc(:math.floor(runner["backRate"])) - 1
-                                    end
-                                  else
-                                    0
-                                  end,
-                                "otype" => "back",
-                                "oname" => "back2",
-                                "tno" => 1
-                              },
-                              %{
-                                "price" =>
-                                  if runner["backRate"] < 0 do
-                                    0
-                                  else
-                                    runner["backRate"]
-                                  end,
-                                "otype" => "back",
-                                "oname" => "back1",
-                                "tno" => 0
-                              }
-                            ],
-                            "availableToLay" => [
-                              %{
-                                "price" =>
-                                  if runner["layRate"] < 0 do
-                                    0
-                                  else
-                                    runner["layRate"]
-                                  end,
-                                "otype" => "lay",
-                                "oname" => "lay1",
-                                "tno" => 0
-                              },
-                              %{
-                                "price" =>
-                                  if isTwoTeam and runner["layRate"] > 100 do
-                                    0
-                                  else
-                                    if (!matchDetail["rateThan100"] and
-                                          runner["layRate"] > 99.99) or
-                                         runner["layRate"] <= 0 do
-                                      0
-                                    else
-                                      trunc(:math.floor(runner["layRate"])) + 1
-                                    end
-                                  end,
-                                "otype" => "lay",
-                                "oname" => "lay2",
-                                "tno" => 1
-                              },
-                              %{
-                                "price" =>
-                                  if isTwoTeam and runner["layRate"] > 100 do
-                                    0
-                                  else
-                                    if (!matchDetail["rateThan100"] and
-                                          runner["layRate"] > 98.99) or
-                                         runner["layRate"] <= 0 do
-                                      0
-                                    else
-                                      trunc(:math.floor(runner["layRate"])) + 2
-                                    end
-                                  end,
-                                "otype" => "lay",
-                                "oname" => "lay3",
-                                "tno" => 2
-                              }
-                            ]
-                          }
-                        }
-                      end)
-                    else
-                      Enum.map(item["runners"] || [], fn run ->
-                        %{
-                          "nat" => run["runnerName"],
-                          "id" => run["id"],
-                          "selectionId" => run["selectionId"],
-                          "sortPriority" => run["sortPriority"]
-                        }
-                      end)
-                    end
+                  "id" => parseData["id"],
+                  "marketId" => parseData["marketId"],
+                  "name" => parseData["name"],
+                  "minBet" => parseData["minBet"],
+                  "maxBet" => parseData["maxBet"],
+                  "type" => parseData["type"],
+                  "isActive" => parseData["isActive"],
+                  "activeStatus" => parseData["activeStatus"],
+                  "isManual" => parseData["isManual"],
+                  "dbRunner" => parseData["runners"],
+                  "gtype" => parseData["gtype"],
+                  "exposureLimit" => parseData["exposureLimit"],
+                  "betLimit" => parseData["betLimit"],
+                  "isCommissionActive" => parseData["isCommissionActive"],
+                  "sno" => parseData["sNo"]
                 }
 
                 formateData = formateOdds(item, obj)
+                # Rebind expertResult
+                eRes = Map.put(eRes, "tournament", eRes["tournament"] ++ [formateData])
+                # If activeStatus is "live", also add to returnResult
+                rRes =
+                  if parseData["activeStatus"] == "live" do
+                    Map.put(rRes, "tournament", rRes["tournament"] ++ [formateData])
+                  else
+                    rRes
+                  end
 
-                rResAcc = Map.put(rResAcc, "tournament", [formateData | rResAcc["tournament"]])
-                eResAcc = Map.put(eResAcc, "tournament", [formateData | eResAcc["tournament"]])
-                returnResult = rResAcc
-                {rResAcc, eResAcc}
+                {iters ++ [item["mid"]], eRes, rRes}
+              else
+                {iters, eRes, rRes}
+              end
+            end)
+
+          # Next, iterate over otherData for any items not already in `iterated`
+          {returnResult, expertResult} =
+            Enum.reduce(otherData, {returnResult, expertResult}, fn item, {rResAcc, eResAcc} ->
+              if item["activeStatus"] != "close" do
+                already =
+                  Enum.find_index(iterated, fn it -> to_string(it) == to_string(item["mid"]) end)
+
+                if already == nil or already < 0 do
+                  isTwoTeam = length(item["runners"] || []) == 2
+
+                  obj = %{
+                    "id" => item["id"],
+                    "marketId" => item["marketId"],
+                    "name" => item["name"],
+                    "minBet" => item["minBet"],
+                    "maxBet" => item["maxBet"],
+                    "type" => item["type"],
+                    "isActive" => item["isActive"],
+                    "activeStatus" => item["activeStatus"],
+                    "isCommissionActive" => item["isCommissionActive"],
+                    "sno" => item["sNo"],
+                    "parentBetId" => item["parentBetId"],
+                    "isManual" => item["isManual"],
+                    "runners" =>
+                      if item["isManual"] do
+                        Enum.map(item["runners"] || [], fn runner ->
+                          %{
+                            "selectionId" => runner["selectionId"],
+                            "status" => String.upcase(runner["status"]),
+                            "nat" => runner["runnerName"],
+                            "id" => runner["id"],
+                            "sortPriority" => runner["sortPriority"],
+                            "parentRunnerId" => runner["parentRunnerId"],
+                            "ex" => %{
+                              "availableToBack" => [
+                                %{
+                                  "price" =>
+                                    if runner["backRate"] > 2 do
+                                      if isTwoTeam and runner["backRate"] > 100 do
+                                        0
+                                      else
+                                        trunc(:math.floor(runner["backRate"])) - 2
+                                      end
+                                    else
+                                      0
+                                    end,
+                                  "otype" => "back",
+                                  "oname" => "back3",
+                                  "tno" => 2
+                                },
+                                %{
+                                  "price" =>
+                                    if runner["backRate"] > 1 do
+                                      if isTwoTeam and runner["backRate"] > 100 do
+                                        0
+                                      else
+                                        trunc(:math.floor(runner["backRate"])) - 1
+                                      end
+                                    else
+                                      0
+                                    end,
+                                  "otype" => "back",
+                                  "oname" => "back2",
+                                  "tno" => 1
+                                },
+                                %{
+                                  "price" =>
+                                    if runner["backRate"] < 0 do
+                                      0
+                                    else
+                                      runner["backRate"]
+                                    end,
+                                  "otype" => "back",
+                                  "oname" => "back1",
+                                  "tno" => 0
+                                }
+                              ],
+                              "availableToLay" => [
+                                %{
+                                  "price" =>
+                                    if runner["layRate"] < 0 do
+                                      0
+                                    else
+                                      runner["layRate"]
+                                    end,
+                                  "otype" => "lay",
+                                  "oname" => "lay1",
+                                  "tno" => 0
+                                },
+                                %{
+                                  "price" =>
+                                    if isTwoTeam and runner["layRate"] > 100 do
+                                      0
+                                    else
+                                      if (!matchDetail["rateThan100"] and
+                                            runner["layRate"] > 99.99) or
+                                           runner["layRate"] <= 0 do
+                                        0
+                                      else
+                                        trunc(:math.floor(runner["layRate"])) + 1
+                                      end
+                                    end,
+                                  "otype" => "lay",
+                                  "oname" => "lay2",
+                                  "tno" => 1
+                                },
+                                %{
+                                  "price" =>
+                                    if isTwoTeam and runner["layRate"] > 100 do
+                                      0
+                                    else
+                                      if (!matchDetail["rateThan100"] and
+                                            runner["layRate"] > 98.99) or
+                                           runner["layRate"] <= 0 do
+                                        0
+                                      else
+                                        trunc(:math.floor(runner["layRate"])) + 2
+                                      end
+                                    end,
+                                  "otype" => "lay",
+                                  "oname" => "lay3",
+                                  "tno" => 2
+                                }
+                              ]
+                            }
+                          }
+                        end)
+                      else
+                        Enum.map(item["runners"] || [], fn run ->
+                          %{
+                            "nat" => run["runnerName"],
+                            "id" => run["id"],
+                            "selectionId" => run["selectionId"],
+                            "sortPriority" => run["sortPriority"]
+                          }
+                        end)
+                      end
+                  }
+
+                  formateData = formateOdds(item, obj)
+
+                  rResAcc = Map.put(rResAcc, "tournament", [formateData | rResAcc["tournament"]])
+                  eResAcc = Map.put(eResAcc, "tournament", [formateData | eResAcc["tournament"]])
+                  returnResult = rResAcc
+                  {rResAcc, eResAcc}
+                else
+                  returnResult = rResAcc
+                  {rResAcc, eResAcc}
+                end
               else
                 returnResult = rResAcc
                 {rResAcc, eResAcc}
               end
-            else
-              returnResult = rResAcc
-              {rResAcc, eResAcc}
-            end
-          end)
+            end)
 
-        {returnResult, expertResult}
-      end
+          {returnResult, expertResult}
+        end
 
-    {returnResult, expertResult}
-  end
+      {sessionApiObj, manualSessionObj} =
+        if isAPISessionActive || isManualSessionActive do
+          sessionData = fetch_session_detail_from_redis(matchDetail["id"])
+          sessionData = Map.values(sessionData || %{})
+          apiResult = %{}
+          manualResult = []
 
-  def process_session(customObject, matchDetail, returnResult, expertResult) do
-    isAPISessionActive =
-      if matchDetail["apiSessionActive"], do: matchDetail["apiSessionActive"], else: false
+          {apiResult, manualResult} =
+            Enum.reduce(sessionData, {%{}, []}, fn item, {apiAcc, manualAcc} ->
+              parseObj =
+                case Jason.decode(item) do
+                  {:ok, m} ->
+                    m
 
-    isManualSessionActive =
-      if matchDetail["manualSessionActive"], do: matchDetail["manualSessionActive"], else: false
+                  {:error, reason} ->
+                    Logger.error("Failed to parse session JSON: #{inspect(reason)}")
+                    %{}
+                end
 
-    {sessionApiObj, manualSessionObj} =
-      if isAPISessionActive || isManualSessionActive do
-        sessionData = fetch_session_detail_from_redis(matchDetail["id"])
-        sessionData = Map.values(sessionData || %{})
-        apiResult = %{}
-        manualResult = []
+              if parseObj["isManual"] do
+                manualAcc = [parseObj | manualAcc]
+                {apiAcc, manualAcc}
+              else
+                type = parseObj["type"] || "unknown"
 
-        {apiResult, manualResult} =
-          Enum.reduce(sessionData, {%{}, []}, fn item, {apiAcc, manualAcc} ->
-            parseObj =
-              case Jason.decode(item) do
-                {:ok, m} ->
-                  m
+                apiAcc =
+                  Map.update(apiAcc, type, [parseObj], fn existing ->
+                    [parseObj | existing]
+                  end)
 
-                {:error, reason} ->
-                  Logger.error("Failed to parse session JSON: #{inspect(reason)}")
-                  %{}
+                {apiAcc, manualAcc}
               end
+            end)
 
-            if parseObj["isManual"] do
-              manualAcc = [parseObj | manualAcc]
-              {apiAcc, manualAcc}
-            else
-              type = parseObj["type"] || "unknown"
+          {apiResult, manualResult}
+        else
+          {%{}, []}
+        end
 
-              apiAcc =
-                Map.update(apiAcc, type, [parseObj], fn existing ->
-                  [parseObj | existing]
-                end)
+      {returnResult, expertResult} =
+        if isAPISessionActive do
+          keys = ["session", "overByover", "ballByBall", "oddEven", "fancy1", "khado", "meter"]
 
-              {apiAcc, manualAcc}
-            end
-          end)
+          {returnResult, expertResult} =
+            Enum.reduce(keys, {returnResult, expertResult}, fn key,
+                                                               {returnResult, expertResult} ->
+              if customObject[key] || sessionApiObj[key] do
+                %{"returnResult" => returnRes, "expertResult" => expertRes} =
+                  formatSessionMarket(key, customObject, sessionApiObj)
 
-        {apiResult, manualResult}
-      else
-        {%{}, []}
-      end
+                returnResult =
+                  Map.update(returnResult, "apiSession", %{key => returnRes}, fn api_map ->
+                    Map.put(api_map, key, returnRes)
+                  end)
 
-    {returnResult, expertResult} =
-      if isAPISessionActive do
-        {returnResult, expertResult} =
-          Enum.reduce(@session_keys, {returnResult, expertResult}, fn key,
-                                                                      {returnResult, expertResult} ->
+                expertResult =
+                  Map.update(expertResult, "apiSession", %{key => expertRes}, fn api_map ->
+                    Map.put(api_map, key, expertRes)
+                  end)
+
+                {returnResult, expertResult}
+              else
+                {returnResult, expertResult}
+              end
+            end)
+
+          key = "cricketCasino"
+
+          {returnResult, expertResult} =
             if customObject[key] || sessionApiObj[key] do
               %{"returnResult" => returnRes, "expertResult" => expertRes} =
-                formatSessionMarket(key, customObject, sessionApiObj)
+                formatCricketCasinoMarket(key, customObject, sessionApiObj)
 
               returnResult =
                 Map.update(returnResult, "apiSession", %{key => returnRes}, fn api_map ->
@@ -539,74 +529,48 @@ defmodule Thirdparty.MatchIntervalManager.Server do
             else
               {returnResult, expertResult}
             end
-          end)
 
-        key = "cricketCasino"
+          {returnResult, expertResult}
+        else
+          {returnResult, expertResult}
+        end
 
-        {returnResult, expertResult} =
-          if customObject[key] || sessionApiObj[key] do
-            %{"returnResult" => returnRes, "expertResult" => expertRes} =
-              formatCricketCasinoMarket(key, customObject, sessionApiObj)
-
-            returnResult =
-              Map.update(returnResult, "apiSession", %{key => returnRes}, fn api_map ->
-                Map.put(api_map, key, returnRes)
+      {returnResult, expertResult} =
+        if isManualSessionActive do
+          returnResult =
+            Map.put(
+              returnResult,
+              "sessionBettings",
+              Enum.filter(manualSessionObj, fn item ->
+                item["activeStatus"] == "live"
               end)
+            )
 
-            expertResult =
-              Map.update(expertResult, "apiSession", %{key => expertRes}, fn api_map ->
-                Map.put(api_map, key, expertRes)
-              end)
+          key = "manualSession"
 
-            {returnResult, expertResult}
-          else
-            {returnResult, expertResult}
-          end
+          %{"expertResult" => expertResult1} =
+            formatSessionMarket(key, %{}, %{
+              key => manualSessionObj
+            })
 
-        {returnResult, expertResult}
-      else
-        {returnResult, expertResult}
-      end
-
-    {returnResult, expertResult} =
-      if isManualSessionActive do
-        returnResult =
-          Map.put(
-            returnResult,
-            "sessionBettings",
-            Enum.filter(manualSessionObj, fn item ->
-              item["activeStatus"] == "live"
+          expertResult =
+            Map.update(expertResult, "apiSession", %{key => expertResult1}, fn api_map ->
+              Map.put(api_map, key, expertResult1)
             end)
-          )
 
-        key = "manualSession"
+          {returnResult, expertResult}
+        else
+          {returnResult, expertResult}
+        end
 
-        %{"expertResult" => expertResult1} =
-          formatSessionMarket(key, %{}, %{
-            key => manualSessionObj
-          })
-
-        expertResult =
-          Map.update(expertResult, "apiSession", %{key => expertResult1}, fn api_map ->
-            Map.put(api_map, key, expertResult1)
-          end)
-
-        {returnResult, expertResult}
-      else
-        {returnResult, expertResult}
-      end
-
-    {returnResult, expertResult}
+      # At this point, returnResult and expertResult have all the tournament entries
+      # Finally, return returnResult from this function
+      {returnResult, expertResult}
+    else
+      # If isManual is true, we do nothing and just return the original “blank” map
+      {returnResult, expertResult}
+    end
   end
-
-  defp build_base(id, mid, data),
-    do: %{
-      "id" => id,
-      "marketId" => mid,
-      "eventId" => data["eventId"],
-      "apiSession" => %{},
-      "tournament" => []
-    }
 
   defp formateOdds(data, redisData) do
     %{
