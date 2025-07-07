@@ -24,11 +24,11 @@ defmodule ThirdpartyWeb.MatchChannel do
 
   @impl true
   def handle_info(:after_join, socket) do
-    user_id = socket.assigns.user_id || UUID.uuid4()
-    key = "user:#{user_id}"
+    userId = socket.assigns.userId || UUID.uuid4()
+    key = "user:#{userId}"
 
     Presence.track(self(), "matches:lobby", key, %{
-      role: user_id,
+      role: userId,
       online_at: inspect(System.system_time(:second))
     })
 

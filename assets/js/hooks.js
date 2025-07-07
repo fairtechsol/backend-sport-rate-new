@@ -137,7 +137,7 @@ let socket = new Socket("/socket", {
   params: {
     roleName: getQueryParam("role"),
     matchIdArray: getQueryParam("matchId") || "f38439f3-6a44-4f7a-a784-83424ac9e042",
-    user_id: getQueryParam("userId")
+    userId: getQueryParam("userId")
   }
 });
 

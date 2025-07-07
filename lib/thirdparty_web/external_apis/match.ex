@@ -68,8 +68,6 @@ defmodule ThirdpartyWeb.ExternalApis.Match do
 
   defp handle_response({:ok, %Response{status: 200, body: body}}) do
     try do
-      Logger.debug("Response body: #{body}")
-
       case Jason.decode(body) do
         {:ok, decoded_json} ->
           {:ok, decoded_json}

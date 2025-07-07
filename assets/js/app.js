@@ -22,7 +22,7 @@ let socket = new Socket("/socket", {
   params: {
     roleName: getQueryParam("role"),           // e.g. "expert" or "viewer"
     matchIdArray: getQueryParam("matchId") || "f38439f3-6a44-4f7a-a784-83424ac9e042", // e.g. "m1,m2,m3" or a single match ID
-    user_id:getQueryParam("userId")    // comma-separated, e.g. "m1,m2,m3"
+    userId:getQueryParam("userId")    // comma-separated, e.g. "m1,m2,m3"
   }
 });
 socket.connect();
