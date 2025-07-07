@@ -157,4 +157,118 @@ defmodule ThirdpartyWeb.Match.MatchController do
     |> put_status(:bad_request)
     |> json(%{status: "error", error: "Missing required query parameter: eventId"})
   end
+
+  def get_score_iframe_url(conn, %{"eventId" => eventId} = params) do
+    sportType = Map.get(params, "sportType", "1")
+    isScore = Map.get(params, "isScore", "false")
+    isTv = Map.get(params, "isTv", "false")
+
+    # spawn tasks only if needed
+    score_task =
+      if isScore do
+        Task.async(fn ->
+          MatchListApi.get_score_iframe_url(eventId, sportType)
+        end)
+      end
+
+    tv_task =
+      if isTv do
+        Task.async(fn ->
+          MatchListApi.get_tv_iframe_url(eventId, sportType)
+        end)
+      end
+
+    # helper to allSettled‑style yield a task (or skip if nil)
+    settle = fn
+      %Task{} = task ->
+        case Task.yield(task, 5_000) do
+          {:ok, val} -> {:fulfilled, val}
+          nil -> {:rejected, :timeout}
+          {:exit, reason} -> {:rejected, reason}
+        end
+
+      nil ->
+        # JS allSettled would give you a Promise<null> immediately;
+        # here we just return :skipped
+        {:skipped, nil}
+    end
+
+    score_result =
+      if score_task != nil do
+        case settle.(score_task) do
+          {:fulfilled, val} ->
+            case val do
+              {:ok, map} ->
+                map
+
+              {:error, reason} ->
+                Logger.error("get_score_iframe_url score_task failed: #{inspect(reason)}")
+                nil
+
+              other ->
+                Logger.error(
+                  "get_score_iframe_url score_task returned unexpected value: #{inspect(other)}"
+                )
+
+                nil
+            end
+
+          {:rejected, reason} ->
+            Logger.error("get_score_iframe_url score_task failed: #{inspect(reason)}")
+            nil
+
+          {:skipped, _} ->
+            # No task was created, so we return nil
+            nil
+        end
+      else
+        nil
+      end
+
+    tv_result =
+      if tv_task != nil do
+        case settle.(tv_task) do
+          {:fulfilled, val} ->
+            case val do
+              {:ok, map} ->
+                map
+
+              {:error, reason} ->
+                Logger.error("get_score_iframe_url tv_task failed: #{inspect(reason)}")
+                nil
+
+              other ->
+                Logger.error(
+                  "get_score_iframe_url tv_task returned unexpected value: #{inspect(other)}"
+                )
+
+                nil
+            end
+
+          {:rejected, reason} ->
+            Logger.error("get_score_iframe_url tv_task failed: #{inspect(reason)}")
+            nil
+
+          {:skipped, _} ->
+            # No task was created, so we return nil
+            nil
+        end
+      else
+        nil
+      end
+
+    Logger.debug(
+      "get_score_iframe_url results: score=#{inspect(score_result)}, tv=#{inspect(tv_result)}"
+    )
+
+    conn
+    |> put_status(:ok)
+    |> json(%{status: "ok", data: %{"scoreData" => score_result, "tvData" => tv_result}})
+  end
+
+  def get_score_iframe_url(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{status: "error", error: "Missing required query parameter: eventId"})
+  end
 end
