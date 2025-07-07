@@ -13,9 +13,9 @@ defmodule Thirdparty.Application do
     redis_name = redis_conf[:name] || :my_redis
 
     children = [
+      {Cachex, name: :match_list_cache},
       # ✅ Start Registry FIRST, and use the exact name expected by your GenServers
       {Registry, keys: :unique, name: Thirdparty.MatchIntervalManager.Registry},
-
       ThirdpartyWeb.Telemetry,
       Thirdparty.Repo,
       {DNSCluster, query: Application.get_env(:thirdparty, :dns_cluster_query) || :ignore},

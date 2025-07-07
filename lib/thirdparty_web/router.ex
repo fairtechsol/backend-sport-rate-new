@@ -42,11 +42,13 @@ defmodule ThirdpartyWeb.Router do
     end
   end
 
-  scope "/api", ThirdpartyWeb do
+  scope "/", ThirdpartyWeb do
     pipe_through(:api)
 
     # Health check
-    get("/matchList", Match.MatchController, :match_list)
-    get("/matchRate/:eventId", Match.MatchController, :match_rate)
+    get("/sportsList", Match.MatchController, :match_list)
+    get("/getAllRateCricket/:eventId", Match.MatchController, :match_rate_cricket)
+    get("/getAllRateFootBallTennis/:eventId", Match.MatchController, :match_rate_football)
+    get("/cricketScore", Match.MatchController, :get_score_card)
   end
 end
