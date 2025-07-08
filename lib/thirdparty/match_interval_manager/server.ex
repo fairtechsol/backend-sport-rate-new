@@ -15,7 +15,6 @@ defmodule Thirdparty.MatchIntervalManager.Server do
   @tick_us String.to_integer(System.get_env("GAME_INTERVAL") || "300")
   ## Client API
   def start_link(match_id) do
-
     GenServer.start_link(__MODULE__, match_id, name: via(match_id))
   end
 
@@ -296,6 +295,10 @@ defmodule Thirdparty.MatchIntervalManager.Server do
 
                 {iters ++ [item["mid"]], eRes, rRes}
               else
+                # Rebind expertResult
+                formateData = formateOdds(item, %{})
+
+                eRes = Map.put(eRes, "tournament", eRes["tournament"] ++ [formateData])
                 {iters, eRes, rRes}
               end
             end)
@@ -612,11 +615,15 @@ defmodule Thirdparty.MatchIntervalManager.Server do
               "nat" => item["nat"],
               "sortPriority" => item["sno"],
               "id" =>
-                (redisData["dbRunner"] || [])
+                redisData["dbRunner"]
+                |> Kernel.||([])
                 |> Enum.find(fn runner ->
                   to_string(runner["selectionId"]) == to_string(item["sid"])
                 end)
-                |> Map.get("id"),
+                |> case do
+                  nil -> nil
+                  runner -> runner["id"]
+                end,
               "ex" => %{
                 "availableToBack" =>
                   (item["odds"] || [])
