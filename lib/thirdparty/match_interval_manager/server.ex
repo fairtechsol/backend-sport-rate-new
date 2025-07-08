@@ -651,6 +651,8 @@ defmodule Thirdparty.MatchIntervalManager.Server do
                   end)
               }
             }
+            |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+            |> Enum.into(%{})
           end)
         else
           redisData["runners"] || []
