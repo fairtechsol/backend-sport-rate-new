@@ -664,6 +664,8 @@ defmodule Thirdparty.MatchIntervalManager.Server do
       "activeStatus" => redisData["activeStatus"],
       "betLimit" => redisData["betLimit"]
     }
+    |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+    |> Enum.into(%{})
   end
 
   defp formatSessionMarket(key, data, redisData) do
