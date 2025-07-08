@@ -12,10 +12,10 @@ defmodule Thirdparty.MatchIntervalManager.Server do
   alias Phoenix.PubSub
 
   # e.g. 2 seconds; match your `liveGameTypeTime`
-  @tick_us 300
+  @tick_us String.to_integer(System.get_env("GAME_INTERVAL") || "300")
   ## Client API
-
   def start_link(match_id) do
+
     GenServer.start_link(__MODULE__, match_id, name: via(match_id))
   end
 
@@ -70,7 +70,9 @@ defmodule Thirdparty.MatchIntervalManager.Server do
   # → fetch fresh data from Redis, then broadcast it on PubSub
   def handle_info(:tick, state) do
     # timer_ref = schedule_tick()
-    {user_data, expert_data} = fetch_data(state.match_id)
+    match_key = "#{state.match_id}_match"
+    match_detail = fetch_match_detail_from_redis(match_key)
+
     Task.start(fn -> do_broadcast(state.match_id) end)
 
     {:noreply, state}
@@ -112,20 +114,34 @@ defmodule Thirdparty.MatchIntervalManager.Server do
   # Adapt as needed to your Redis client.
   defp fetch_match_detail_from_redis(match_id) do
     redis_conn = :my_redis
+    max_tries = 20
+    delay_ms = 300
 
-    case Redix.command(redis_conn, ["HGETALL", match_id]) do
-      {:ok, %{}} ->
-        IO.puts("Hash 'my_hash' is empty or does not exist")
+    do_fetch_match_detail(redis_conn, match_id, max_tries, delay_ms)
+  end
+
+  defp do_fetch_match_detail(redis_conn, match_id, try_left, delay_ms) do
+    case Redix.command(redis_conn, ["HGETALL", "#{match_id}"]) do
+      {:ok, []} ->
+        if try_left > 0 do
+          Process.sleep(delay_ms)
+          do_fetch_match_detail(redis_conn, match_id, try_left - 1, delay_ms)
+        else
+          IO.puts("Hash '#{match_id}' is empty after retries.")
+          %{}
+        end
 
       {:ok, flat_list} when is_list(flat_list) ->
-        # flat_list is like ["field1", "value1", "field2", "value2", …]
         hash_map =
           flat_list
           |> Enum.chunk_every(2)
           |> Enum.into(%{}, fn [k, v] -> {k, v} end)
 
+        hash_map
+
       {:error, reason} ->
         IO.puts("Redis HGETALL error: #{inspect(reason)}")
+        %{}
     end
   end
 
