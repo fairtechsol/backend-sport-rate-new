@@ -25,9 +25,59 @@ defmodule ThirdpartyWeb.Match.MatchController do
         fetch_fun = fn _key ->
           case MatchListApi.fetch_match_list(game_type) do
             # On success, commit into cache with a 60 s TTL
-            {:ok, map} -> {:commit, map, ttl: :timer.seconds(60)}
+            {:ok, map} ->
+              data =
+                if game_type == 4 and map do
+                  map
+                  |> Map.values()
+                  |> List.flatten()
+                else
+                  map
+                end
+
+              data =
+                if game_type == 4 do
+                  data
+                  |> Enum.filter(fn match ->
+                    if match["iscc"] == 0 do
+                      bevent_id =
+                        cond do
+                          match["beventId"] ->
+                            match["beventId"]
+
+                          match["oldgmid"] ->
+                            match["oldgmid"]
+
+                          true ->
+                            nil
+                        end
+
+                      if bevent_id do
+                        # Return true to keep this match
+                        true
+                      else
+                        false
+                      end
+                    else
+                      false
+                    end
+                  end)
+                  |> Enum.map(fn match ->
+                    # Update beventId if needed
+                    updated_beventId =
+                      match["beventId"] || match["oldgmid"]
+
+                    Map.put(match, "beventId", updated_beventId)
+                  end)
+                else
+                  data
+                end
+
+              {:commit, data, ttl: :timer.seconds(60)}
+
             # On error, ignore so we don’t cache failures
-            {:error, err} -> {:ignore, err}
+            {:error, err} ->
+              {:ignore, err}
           end
         end
 
@@ -38,7 +88,7 @@ defmodule ThirdpartyWeb.Match.MatchController do
 
             conn
             |> put_status(:ok)
-            |> json(%{status: "ok", data: map})
+            |> json(map)
 
           # miss → fetched → commit
           {:commit, map, _} ->
@@ -46,7 +96,7 @@ defmodule ThirdpartyWeb.Match.MatchController do
 
             conn
             |> put_status(:ok)
-            |> json(%{status: "ok", data: map})
+            |> json(map)
 
           # upstream error
           {:ignore, err} ->
