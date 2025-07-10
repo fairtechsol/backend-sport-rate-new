@@ -480,6 +480,8 @@ defmodule Thirdparty.MatchIntervalManager.Server do
             end)
 
           {returnResult, expertResult}
+        else
+          {returnResult, expertResult}
         end
 
       {sessionApiObj, manualSessionObj} =
