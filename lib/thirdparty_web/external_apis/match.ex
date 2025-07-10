@@ -52,7 +52,7 @@ defmodule ThirdpartyWeb.ExternalApis.Match do
 
       # Build a GET request
       Finch.build(:get, url)
-      |> Finch.request(@finch)
+      |> Finch.request(@finch, receive_timeout: 1_000)
       |> handle_response()
     rescue
       e in RuntimeError ->
@@ -70,11 +70,12 @@ defmodule ThirdpartyWeb.ExternalApis.Match do
   def get_score_iframe_url(eventId, type \\ "1") do
     try do
       sport_list = fetch_match_list(String.to_integer(type))
+
       bId =
         case sport_list do
           {:ok, data} ->
-
-            curr_item = Enum.find(data, fn item -> to_string(item["gmid"]) == to_string(eventId) end)
+            curr_item =
+              Enum.find(data, fn item -> to_string(item["gmid"]) == to_string(eventId) end)
 
             curr_item =
               if curr_item do
@@ -82,6 +83,7 @@ defmodule ThirdpartyWeb.ExternalApis.Match do
               else
                 nil
               end
+
             curr_item
 
           {:error, _} ->
