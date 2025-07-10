@@ -103,11 +103,11 @@ defmodule Thirdparty.MatchIntervalManager.Server do
       %{"marketId" => market_id} ->
         user_task = Task.async(fn -> getCricketData(match_id, market_id, match_detail) end)
         score_task = Task.async(fn -> get_score(match_detail["eventId"]) end)
-
         # Await both results
         {user_data, expert_data} = Task.await(user_task)
         score = Task.await(score_task)
-        Map.put(user_data, "scoreBoard", score)
+        Logger.debug("Fetching data for match_id: #{inspect(score)}, market_id: #{market_id}")
+        user_data=Map.put(user_data, "scoreBoard", score)
 
         {user_data, expert_data}
 
@@ -122,7 +122,6 @@ defmodule Thirdparty.MatchIntervalManager.Server do
     case MatchListApi.get_score_card(eventId, "0") do
       {:ok, map} ->
         map
-
       {:error, reason} ->
         %{msg: "Not found", success: false}
     end
@@ -913,6 +912,8 @@ defmodule Thirdparty.MatchIntervalManager.Server do
           end)
 
         {onlyLiveSession, addedSession, expertSession}
+      else
+        {[], [], []}
       end
 
     Enum.map(currRedisData, fn session ->
