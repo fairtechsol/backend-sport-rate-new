@@ -78,7 +78,14 @@ defmodule Thirdparty.MatchIntervalManager.Server do
   end
 
   defp do_broadcast(match_id) do
-    {user_data, expert_data} = fetch_data(match_id)
+    user_task = Task.async(fn -> fetch_data(match_id) end)
+    score_task = Task.async(fn -> get_score_card(match_id) end)
+
+    # Await both results
+    {user_data, expert_data} = Task.await(user_task)
+    score = Task.await(score_task)
+    Map.put(user_data, "scoreBoard", score)
+
     PubSub.broadcast(Thirdparty.PubSub, "match:#{match_id}", {:match_data, match_id, user_data})
 
     PubSub.broadcast(
@@ -86,6 +93,16 @@ defmodule Thirdparty.MatchIntervalManager.Server do
       "match_expert:#{match_id}",
       {:match_data, match_id, expert_data}
     )
+  end
+
+  def get_score_card(conn, %{"eventId" => eventId}) do
+    case MatchListApi.get_score_card(eventId) do
+      {:ok, map} ->
+        map
+
+      {:error, reason} ->
+        %{msg: "Not found", success: false}
+    end
   end
 
   # defp schedule_tick do
