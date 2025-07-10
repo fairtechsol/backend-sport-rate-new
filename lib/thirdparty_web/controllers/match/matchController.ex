@@ -208,8 +208,8 @@ defmodule ThirdpartyWeb.Match.MatchController do
     |> json(%{status: "error", error: "Missing required query parameter: eventId"})
   end
 
-  def get_score_iframe_url(conn, %{"eventId" => eventId} = params) do
-    sportType = Map.get(params, "sportType", "1")
+  def get_iframe_url(conn, %{"eventId" => eventId} = params) do
+    sportType = Map.get(params, "sportType", "cricket")
     isScore = Map.get(params, "isScore", "false")
     isTv = Map.get(params, "isTv", "false")
 
@@ -217,14 +217,14 @@ defmodule ThirdpartyWeb.Match.MatchController do
     score_task =
       if isScore do
         Task.async(fn ->
-          MatchListApi.get_score_iframe_url(eventId, sportType)
+          MatchListApi.get_score_iframe_url(eventId, to_string(Constant.game_type()[sportType]))
         end)
       end
 
     tv_task =
       if isTv do
         Task.async(fn ->
-          MatchListApi.get_tv_iframe_url(eventId, sportType)
+          MatchListApi.get_tv_iframe_url(eventId, to_string(Constant.game_type()[sportType]))
         end)
       end
 

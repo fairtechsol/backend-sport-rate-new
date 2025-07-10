@@ -70,15 +70,11 @@ defmodule ThirdpartyWeb.ExternalApis.Match do
   def get_score_iframe_url(eventId, type \\ "1") do
     try do
       sport_list = fetch_match_list(String.to_integer(type))
-
       bId =
         case sport_list do
           {:ok, data} ->
-            Logger.debug(
-              "Sport List: #{inspect(Enum.find(data, fn item -> item["gmid"] == eventId end))}"
-            )
 
-            curr_item = Enum.find(data, fn item -> item["gmid"] == eventId end)
+            curr_item = Enum.find(data, fn item -> to_string(item["gmid"]) == to_string(eventId) end)
 
             curr_item =
               if curr_item do
@@ -86,7 +82,6 @@ defmodule ThirdpartyWeb.ExternalApis.Match do
               else
                 nil
               end
-
             curr_item
 
           {:error, _} ->

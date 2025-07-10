@@ -50,6 +50,6 @@ defmodule ThirdpartyWeb.Router do
     get("/getAllRateCricket/:eventId", Match.MatchController, :match_rate_cricket)
     get("/getAllRateFootBallTennis/:eventId", Match.MatchController, :match_rate_football)
     get("/cricketScore", Match.MatchController, :get_score_card)
-    get("/getIframeUrl/:eventId", Match.MatchController, :get_score_iframe_url)
+    get("/getIframeUrl/:eventId", Match.MatchController, :get_iframe_url)
   end
 end
