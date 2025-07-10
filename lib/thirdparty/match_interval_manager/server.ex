@@ -106,7 +106,7 @@ defmodule Thirdparty.MatchIntervalManager.Server do
         # Await both results
         {user_data, expert_data} = Task.await(user_task)
         score = Task.await(score_task)
-        user_data=Map.put(user_data, "scoreBoard", score)
+        user_data = Map.put(user_data, "scoreBoard", score)
 
         {user_data, expert_data}
 
@@ -121,6 +121,7 @@ defmodule Thirdparty.MatchIntervalManager.Server do
     case MatchListApi.get_score_card(eventId, "0") do
       {:ok, map} ->
         map
+
       {:error, reason} ->
         %{msg: "Not found", success: false}
     end
@@ -226,6 +227,9 @@ defmodule Thirdparty.MatchIntervalManager.Server do
                if(matchDetail["matchType"] == "cricket", do: "2", else: "3"),
                matchDetail["eventId"]
              ) do
+          {:ok, []} ->
+            []
+
           {:ok, map} ->
             map["data"]
 
