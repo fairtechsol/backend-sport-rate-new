@@ -106,7 +106,6 @@ defmodule Thirdparty.MatchIntervalManager.Server do
         # Await both results
         {user_data, expert_data} = Task.await(user_task)
         score = Task.await(score_task)
-        Logger.debug("Fetching data for match_id: #{inspect(score)}, market_id: #{market_id}")
         user_data=Map.put(user_data, "scoreBoard", score)
 
         {user_data, expert_data}
@@ -193,7 +192,6 @@ defmodule Thirdparty.MatchIntervalManager.Server do
   end
 
   def getCricketData(matchId, marketId, matchData) do
-    Logger.debug(matchId)
     alias ThirdpartyWeb.ExternalApis.Match, as: MatchListApi
     alias ThirdpartyWeb.Constant, as: Constant
     matchDetail = matchData
