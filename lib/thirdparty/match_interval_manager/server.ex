@@ -117,7 +117,7 @@ defmodule Thirdparty.MatchIntervalManager.Server do
   end
 
   defp get_score(eventId) do
-    case MatchListApi.get_score_card(eventId) do
+    case MatchListApi.get_score_card(eventId, "0") do
       {:ok, map} ->
         map
 
