@@ -729,12 +729,12 @@ defmodule Thirdparty.MatchIntervalManager.Server do
             sessionObj =
               if is_integer(sessionIndex) and sessionIndex >= 0 do
                 redisMap = Enum.at(currRedisData, sessionIndex)
-
+Logger.debug("Found session in Redis: #{inspect(redisMap)}")
                 sessionObj
                 |> Map.put("id", redisMap["id"])
                 |> Map.put("activeStatus", redisMap["activeStatus"])
-                |> Map.put("min", redisMap["min"])
-                |> Map.put("max", redisMap["max"])
+                |> Map.put("min", redisMap["minBet"])
+                |> Map.put("max", redisMap["maxBet"])
                 |> Map.put("createdAt", redisMap["createdAt"])
                 |> Map.put("updatedAt", redisMap["updatedAt"])
                 |> Map.put("exposureLimit", redisMap["exposureLimit"])
@@ -894,8 +894,8 @@ defmodule Thirdparty.MatchIntervalManager.Server do
                 sessionObj
                 |> Map.put("id", redisMap["id"])
                 |> Map.put("activeStatus", redisMap["activeStatus"])
-                |> Map.put("min", redisMap["min"])
-                |> Map.put("max", redisMap["max"])
+                |> Map.put("min", session["minBet"])
+              |> Map.put("max", session["maxBet"])
                 |> Map.put("createdAt", redisMap["createdAt"])
                 |> Map.put("updatedAt", redisMap["updatedAt"])
                 |> Map.put("exposureLimit", redisMap["exposureLimit"])
