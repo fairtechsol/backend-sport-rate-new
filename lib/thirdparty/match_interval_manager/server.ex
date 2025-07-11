@@ -85,7 +85,13 @@ defmodule Thirdparty.MatchIntervalManager.Server do
     PubSub.broadcast(
       Thirdparty.PubSub,
       "match_expert:#{match_id}",
-      {:match_data, match_id, expert_data}
+      {:match_data, match_id, Map.drop(expert_data, ["apiSession"])}
+    )
+
+    PubSub.broadcast(
+      Thirdparty.PubSub,
+      "match_expert_session:#{match_id}",
+      {:match_data, match_id, Map.drop(expert_data, ["tournament"])}
     )
   end
 

@@ -10,10 +10,11 @@ defmodule ThirdpartyWeb.MatchChannel do
   def join("matches:lobby", _payload, socket) do
     role = socket.assigns.role_name
     ids = socket.assigns.match_ids
+    isSession = socket.assigns.isSession
     Logger.debug("Joining matches:lobby with role: #{role} and match_ids: #{inspect(ids)}")
 
     for id <- ids do
-      topic = topic_for(id, role)
+      topic = topic_for(id, role, isSession)
       PubSub.subscribe(Thirdparty.PubSub, topic)
       MatchIntervalManager.track_listener(id)
     end
@@ -38,8 +39,12 @@ defmodule ThirdpartyWeb.MatchChannel do
   end
 
   @impl true
-  def handle_in("disconnectCricketData", %{"matchId" => id, "roleName" => role}, socket) do
-    PubSub.unsubscribe(Thirdparty.PubSub, topic_for(id, role))
+  def handle_in(
+        "disconnectCricketData",
+        %{"matchId" => id, "roleName" => role, "isSession" => isSession},
+        socket
+      ) do
+    PubSub.unsubscribe(Thirdparty.PubSub, topic_for(id, role, isSession))
     MatchIntervalManager.untrack_listener(id)
     {:noreply, socket}
   end
@@ -67,9 +72,11 @@ defmodule ThirdpartyWeb.MatchChannel do
     for id <- socket.assigns.match_ids do
       MatchIntervalManager.untrack_listener(id)
     end
+
     :ok
   end
 
-  defp topic_for(id, "expert"), do: "match_expert:#{id}"
-  defp topic_for(id, _), do: "match:#{id}"
+  defp topic_for(id, "expert", true), do: "match_expert_session:#{id}"
+  defp topic_for(id, "expert", _), do: "match_expert:#{id}"
+  defp topic_for(id, _, _), do: "match:#{id}"
 end
