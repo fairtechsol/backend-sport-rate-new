@@ -52,9 +52,10 @@ defmodule ThirdpartyWeb.MatchChannel do
   @impl true
   def handle_in("leaveAllRoom", _payload, socket) do
     role = socket.assigns.role_name
+    isSession = socket.assigns.isSession
 
     for id <- socket.assigns.match_ids do
-      PubSub.unsubscribe(Thirdparty.PubSub, topic_for(id, role))
+      PubSub.unsubscribe(Thirdparty.PubSub, topic_for(id, role, isSession))
       MatchIntervalManager.untrack_listener(id)
     end
 
