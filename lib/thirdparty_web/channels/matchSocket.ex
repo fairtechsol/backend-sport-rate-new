@@ -10,8 +10,9 @@ defmodule ThirdpartyWeb.MatchChannel do
   def join("matches:lobby", _payload, socket) do
     role = socket.assigns.role_name
     ids = socket.assigns.match_ids
-    isSession = socket.assigns.isSession
-    Logger.debug("Joining matches:lobby with role: #{role} and match_ids: #{inspect(ids)}")
+    isSession = socket.assigns[:isSession]
+
+    Logger.debug("Joining matches:lobby with role: #{role} and match_ids: #{inspect(ids)} #{inspect(socket.assigns)}")
 
     for id <- ids do
       topic = topic_for(id, role, isSession)
@@ -41,9 +42,10 @@ defmodule ThirdpartyWeb.MatchChannel do
   @impl true
   def handle_in(
         "disconnectCricketData",
-        %{"matchId" => id, "roleName" => role, "isSession" => isSession},
+        %{"matchId" => id, "roleName" => role}=params,
         socket
       ) do
+        isSession=params["isSession"]
     PubSub.unsubscribe(Thirdparty.PubSub, topic_for(id, role, isSession))
     MatchIntervalManager.untrack_listener(id)
     {:noreply, socket}
@@ -52,7 +54,7 @@ defmodule ThirdpartyWeb.MatchChannel do
   @impl true
   def handle_in("leaveAllRoom", _payload, socket) do
     role = socket.assigns.role_name
-    isSession = socket.assigns.isSession
+    isSession = socket.assigns[:isSession]
 
     for id <- socket.assigns.match_ids do
       PubSub.unsubscribe(Thirdparty.PubSub, topic_for(id, role, isSession))
@@ -77,7 +79,7 @@ defmodule ThirdpartyWeb.MatchChannel do
     :ok
   end
 
-  defp topic_for(id, "expert", true), do: "match_expert_session:#{id}"
+  defp topic_for(id, "expert", "true"), do: "match_expert_session:#{id}"
   defp topic_for(id, "expert", _), do: "match_expert:#{id}"
   defp topic_for(id, _, _), do: "match:#{id}"
 end

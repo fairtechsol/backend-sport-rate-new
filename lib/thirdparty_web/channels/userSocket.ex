@@ -11,7 +11,7 @@ defmodule ThirdpartyWeb.UserSocket do
 
   @impl true
   def connect(
-        %{"roleName" => role_name, "matchIdArray" => match_ids, "userId" => userId},
+        %{"roleName" => role_name, "matchIdArray" => match_ids, "userId" => userId}=params,
         socket,
         _info
       ) do
@@ -31,6 +31,7 @@ defmodule ThirdpartyWeb.UserSocket do
         |> assign(:role_name, role_name)
         |> assign(:match_ids, ids)
         |> assign(:userId, userId)
+        |> assign(:isSession, params["isSession"])
 
       {:ok, socket}
     end
